@@ -24,7 +24,7 @@ take around **2 minutes** to produce the same job: that's roughly a
 ## Install
 
 ```
-pip install pygrbl_build
+pip install pygrbl-build
 ```
 
 **The only requirements are Pillow and a C compiler.** Pillow is the
