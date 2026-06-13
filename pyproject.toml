@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pygrbl_build"
+description = "G-code generation algorithms for GRBL diode lasers from different sources; raster Line-to-Line (LaserGRBL-faithful) available today"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [{ name = "pygrbl_build developers" }]
+keywords = ["grbl", "gcode", "laser", "raster", "lasergrbl", "engraving"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Manufacturing",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: C",
+    "Topic :: Scientific/Engineering :: Image Processing",
+    "Typing :: Typed",
+]
+dynamic = ["version"]
+
+dependencies = [
+    "pillow>=11.3.0,<12",
+]
+
+[dependency-groups]
+dev = ["pytest"]
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+packages = ["pygrbl_build"]
+
+[tool.setuptools.package-data]
+pygrbl_build = ["py.typed"]
+
+[tool.setuptools.dynamic]
+version = { attr = "pygrbl_build.__version__" }
