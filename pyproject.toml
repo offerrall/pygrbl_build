@@ -4,12 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pygrbl_build"
-description = "G-code generation algorithms for GRBL diode lasers from different sources; raster Line-to-Line (LaserGRBL-faithful) available today"
+description = "G-code generation algorithms for GRBL diode lasers from different sources (raster Line-to-Line, SVG vector, image vector), plus image-to-SVG tracing; LaserGRBL-faithful"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
 authors = [{ name = "pygrbl_build developers" }]
-keywords = ["grbl", "gcode", "laser", "raster", "lasergrbl", "engraving"]
+keywords = ["grbl", "gcode", "laser", "raster", "vector", "svg", "potrace", "lasergrbl", "engraving"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Manufacturing",

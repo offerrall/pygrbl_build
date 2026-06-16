@@ -1,9 +1,9 @@
-# PyGrbl_Build 0.1.0
+# PyGrbl_Build 0.2.0
 
 [![PyPI](https://img.shields.io/pypi/v/pygrbl_build.svg)](https://pypi.org/project/pygrbl_build/)
 
 A collection of algorithms to generate **G-code for GRBL diode lasers**
-from different sources. Three algorithms today:
+from different sources. Four algorithms today:
 
 - **Line-to-Line** (`l2l_gcode`) — raster engraving from an image, with
   LaserGRBL fidelity.
@@ -15,6 +15,11 @@ from different sources. Three algorithms today:
   Potrace traces its outlines as closed contours, and each curve is
   emitted as G2/G3 arcs. Pure Python, Pillow only. Outlines only today
   (no interior filling yet).
+- **Image to SVG** (`img2svg`) — the same Potrace trace as
+  `img2vector_gcode`, but the contours are written to a standard vector
+  SVG instead of G-code. Inner contours become holes (`fill-rule`
+  `evenodd`), so you get the filled black silhouette potrace.exe produces.
+  Pure Python, Pillow only.
 
 Part of the **pygrbl** family, a set of libraries to manage GRBL.
 Companion to [`pygrbl_streamer`](https://github.com/offerrall/pygrbl_streamer)
@@ -83,6 +88,27 @@ resolution in pixels/mm. The `Img2VectorProfile` defaults follow Potrace's
 classic settings (smooth curves, optimization on); set `alphamax=0.0` and
 `opticurve=False` to mimic LaserGRBL's own out-of-the-box UI defaults.
 
+Image to SVG (`img2svg` + `Img2SvgProfile`):
+
+```python
+from pygrbl_build import Img2SvgProfile, img2svg
+
+profile = Img2SvgProfile(width_mm=80.0, quality=10.0)
+svg = img2svg("logo.png", profile)
+with open("logo.svg", "w", encoding="utf-8") as f:
+    f.write(svg)
+```
+
+`img2svg` runs the same trace as `img2vector_gcode` (resize, grayscale,
+white-clip, optional threshold, then Potrace outlines), but skips the
+biarc/G-code stages and writes the contours as a single filled `<path>`.
+It returns the complete SVG document as a string (not a G-code iterator,
+so use your own `open()`). The `Img2SvgProfile` carries only the tracing
+and binarization knobs — no feed, power or laser-mode fields. `viewBox`
+is in pixels (`width_mm*quality`) while `width`/`height` carry the
+physical size in mm, and the image keeps its natural top-down
+orientation (no Y-flip, unlike the G-code path).
+
 `write_gcode` writes the path verbatim, so you choose the extension
 (`.nc`, `.gcode`, `.g`, ...). It's just a convenience: every `*_gcode`
 generator is a lazy iterator of lines, so anything beyond writing a
@@ -90,4 +116,5 @@ plain file (compression, network shipping, streaming to the machine) is
 the upper layer's job — consume the iterator with whatever sink you need.
 
 Public API: `L2LProfile`, `l2l_gcode`, `SvgProfile`, `svg_gcode`,
-`Img2VectorProfile`, `img2vector_gcode`, `write_gcode`. See the docstrings.
+`Img2VectorProfile`, `img2vector_gcode`, `Img2SvgProfile`, `img2svg`,
+`write_gcode`. See the docstrings.

@@ -1478,12 +1478,14 @@ def _is_grayscale(img):
     return True
 
 
-def _preprocess(image_path, profile):
+def _preprocess(image_path, profile, flip_y=True):
     """Open, resize and binarize an image into Potrace's input bitmap.
 
     Returns (w, h, data) where data is a bytearray of 0/1 (1 = black,
-    row-major), already flipped vertically like LaserGRBL does before
-    tracing.
+    row-major). When ``flip_y`` is True (the G-code path) the bitmap is
+    flipped vertically like LaserGRBL does before tracing, so Y grows
+    upward. The SVG path passes ``flip_y=False`` to keep the image's
+    natural top-down orientation (SVG's origin is top-left, Y down).
     """
     from pathlib import Path
 
@@ -1543,7 +1545,8 @@ def _preprocess(image_path, profile):
         flat = flat.point(lambda v, t=thr: 255 if v >= t else 0)
 
     # --- flip Y (LaserGRBL flips the bitmap before tracing) --------------- #
-    flat = flat.transpose(Image.FLIP_TOP_BOTTOM)
+    if flip_y:
+        flat = flat.transpose(Image.FLIP_TOP_BOTTOM)
 
     # --- Potrace's ConvertBitmap: black (1) if R+G+B < 382.5, i.e. gray<127.5
     bit = flat.point(lambda v: 1 if v < 127.5 else 0)
@@ -1670,3 +1673,81 @@ def convert(image_path, profile):
         l_off = profile.laser_off
 
     return _export_gcode(contours, oX, oY, scale, l_on, l_off, "G0")
+
+
+# --------------------------------------------------------------------------- #
+# SECTION E — SVG emitter (Potrace's native output; not in LaserGRBL)
+# --------------------------------------------------------------------------- #
+#
+# LaserGRBL only ever exports G-code, but the Potrace core above produces
+# exactly what a vector SVG needs: closed contours of straight lines and
+# cubic Beziers in pixel coordinates. This emitter walks the same contours
+# trace() returns and writes them as a single <path> of M/L/C/Z subpaths.
+# No biarc approximation (SECTION B) or G-code (SECTION D) is involved.
+#
+# Like potrace.exe's SVG backend, every contour goes into one path filled
+# with fill-rule="evenodd", so inner contours (Potrace sign "-") render as
+# holes — the correct filled silhouette, not just outlines.
+
+
+def _path_data(contours):
+    """Build the ``d`` attribute: one ``M ... Z`` subpath per contour, with
+    ``L`` for line segments and ``C`` for cubic Beziers. Coordinates are in
+    bitmap pixels (origin top-left, Y down), formatted like the G-code path
+    ("0.###"). Returns "" when there is nothing to trace."""
+    parts = []
+    for curves in contours:
+        if not curves:
+            continue
+        first = curves[0]
+        parts.append(f"M{_fmt_num(first.A.X)} {_fmt_num(first.A.Y)}")
+        for curve in curves:
+            if curve.kind == _LINE:
+                parts.append(f"L{_fmt_num(curve.B.X)} {_fmt_num(curve.B.Y)}")
+            else:
+                parts.append(
+                    f"C{_fmt_num(curve.ControlPointA.X)} "
+                    f"{_fmt_num(curve.ControlPointA.Y)} "
+                    f"{_fmt_num(curve.ControlPointB.X)} "
+                    f"{_fmt_num(curve.ControlPointB.Y)} "
+                    f"{_fmt_num(curve.B.X)} {_fmt_num(curve.B.Y)}"
+                )
+        parts.append("Z")
+    return " ".join(parts)
+
+
+def convert_svg(image_path, profile):
+    """Trace an image to a standard vector SVG and return it as a string.
+
+    Reuses the Potrace core and image preprocessing of the G-code path,
+    but skips the biarc/G-code stages: the traced contours go straight to
+    an SVG ``<path>``. The bitmap is not Y-flipped (SVG keeps the image's
+    top-down orientation). ``viewBox`` is in pixels; ``width``/``height``
+    carry the physical size in millimetres (width_mm and the aspect-locked
+    height), so the SVG scales to real dimensions while the geometry stays
+    in pixel space.
+    """
+    px_w, px_h, data = _preprocess(image_path, profile, flip_y=False)
+
+    tracer = _Potrace(
+        turnpolicy=profile.turnpolicy,
+        turdsize=profile.turdsize,
+        alphamax=profile.alphamax,
+        opttolerance=profile.opttolerance,
+        curveoptimizing=profile.opticurve,
+    )
+    contours = tracer.trace(px_w, px_h, data)
+
+    w_mm = _fmt_num(px_w / profile.quality)
+    h_mm = _fmt_num(px_h / profile.quality)
+    d = _path_data(contours)
+    path = f'  <path d="{d}" fill="#000000" fill-rule="evenodd"/>\n' if d else ""
+
+    return (
+        '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n'
+        f'<svg xmlns="http://www.w3.org/2000/svg" '
+        f'width="{w_mm}mm" height="{h_mm}mm" '
+        f'viewBox="0 0 {px_w} {px_h}">\n'
+        f"{path}"
+        "</svg>\n"
+    )

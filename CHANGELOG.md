@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.2.0 - 2026-06-16
+
+### Added
+
+- **Image to SVG** algorithm (`img2svg` + `Img2SvgProfile`): traces a
+  raster image to a standard vector SVG, reusing the same Potrace core
+  and image preprocessing as `img2vector_gcode` but skipping the
+  biarc/G-code stages. The contours are written as a single filled
+  `<path>` with `fill-rule="evenodd"`, so inner contours become holes
+  (the filled black silhouette potrace.exe produces). `viewBox` is in
+  pixels while `width`/`height` carry the physical size in mm, and the
+  bitmap is not Y-flipped, keeping the image's natural top-down
+  orientation. `Img2SvgProfile` carries only the tracing and
+  binarization knobs (no feed/power/laser-mode fields). Pure Python,
+  Pillow only.
+
 ## 0.1.0 - 2026-06-16
 
 ### Added

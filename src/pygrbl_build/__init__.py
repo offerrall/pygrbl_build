@@ -10,7 +10,7 @@ from . import _l2l_native
 from . import _svg
 from . import _img2vec
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "__version__",
@@ -20,6 +20,8 @@ __all__ = [
     "svg_gcode",
     "Img2VectorProfile",
     "img2vector_gcode",
+    "Img2SvgProfile",
+    "img2svg",
     "write_gcode",
 ]
 
@@ -586,6 +588,137 @@ def img2vector_gcode(image_path: str, profile: Img2VectorProfile) -> Iterator[st
     """
     body = _img2vec.convert(image_path, profile)
     return chain(_img2vec_header(image_path, profile), body, ("M5 S0", "G0 X0 Y0"))
+
+
+@dataclass(frozen=True)
+class Img2SvgProfile:
+    """Image-to-SVG tracing calibration: the trace/binarization recipe for
+    the img2svg algorithm. Frozen and validated, like the others.
+
+    Same Potrace pipeline as Img2VectorProfile, but the output is a standard
+    vector SVG instead of laser G-code, so it carries only the tracing and
+    binarization knobs — no feed, power or laser-mode fields. The traced
+    contours are written as one filled <path> with fill-rule="evenodd", so
+    inner contours become holes (the filled silhouette potrace.exe produces),
+    not just outlines.
+
+    Attributes:
+        width_mm: Physical width in mm, written to the SVG's width/height
+            (height follows the image's aspect ratio). The traced geometry
+            stays in pixel space (viewBox), so this only sets display size.
+        quality: Tracing resolution in pixels per mm. The bitmap is
+            width_mm*quality px wide; width/height in mm are derived by
+            dividing the pixel size back by this.
+        turdsize: Despeckle. Contours with area <= turdsize are dropped.
+        turnpolicy: Diagonal-ambiguity rule: "minority", "majority",
+            "right", "black" or "white". Potrace's default is "minority".
+        alphamax: Corner threshold (0.0-1.334). Higher = rounder corners;
+            0.0 makes every vertex a sharp corner.
+        opttolerance: Curve-optimization tolerance. Higher = more aggressive
+            merging of Beziers.
+        opticurve: Run the curve-optimization stage (Potrace's optiCurve).
+        formula: Grayscale weights: "simple_average", "weight_average",
+            "optical_correct" or "custom". Grayscale inputs are forced to
+            "simple_average", exactly like LaserGRBL.
+        red, green, blue: Per-channel weights (0-100), only used by "custom".
+        brightness: 0-100. 100 = unchanged; lower darkens.
+        contrast: 0-100+. Linear channel scale (100 = unchanged).
+        white_clip: Near-white clip (0-100). Pixels within this of pure
+            white are dropped (treated as background). 0 disables it.
+        threshold: Binarization cut 0-100, only applied when use_threshold.
+        use_threshold: Apply the threshold cut before tracing. When False
+            the gray image still gets binarized by Potrace at R+G+B<382.5.
+
+    Raises:
+        TypeError: On construction, if a field has the wrong type.
+        ValueError: On construction, if a numeric field is out of range, or
+            turnpolicy/formula are not recognized.
+    """
+
+    width_mm: float
+    quality: float = 10.0
+    turdsize: int = 2
+    turnpolicy: str = "minority"
+    alphamax: float = 1.0
+    opttolerance: float = 0.2
+    opticurve: bool = True
+    formula: str = "simple_average"
+    red: int = 100
+    green: int = 100
+    blue: int = 100
+    brightness: int = 100
+    contrast: int = 100
+    white_clip: int = 5
+    threshold: int = 50
+    use_threshold: bool = False
+
+    def __post_init__(self) -> None:
+        for name in ("width_mm", "quality", "alphamax", "opttolerance"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise TypeError(f"{name} must be a number, got {type(value).__name__}")
+        for name in ("turdsize", "red", "green", "blue", "brightness",
+                     "contrast", "white_clip", "threshold"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise TypeError(f"{name} must be int, got {type(value).__name__}")
+        for name in ("opticurve", "use_threshold"):
+            if not isinstance(getattr(self, name), bool):
+                raise TypeError(f"{name} must be bool")
+
+        if self.width_mm <= 0:
+            raise ValueError(f"width_mm must be positive, got {self.width_mm}")
+        if self.quality <= 0:
+            raise ValueError(f"quality must be positive, got {self.quality}")
+        if self.turdsize < 0:
+            raise ValueError(f"turdsize must be >= 0, got {self.turdsize}")
+        if self.alphamax < 0:
+            raise ValueError(f"alphamax must be >= 0, got {self.alphamax}")
+        if self.opttolerance < 0:
+            raise ValueError(f"opttolerance must be >= 0, got {self.opttolerance}")
+        for name in ("red", "green", "blue", "brightness", "white_clip",
+                     "threshold"):
+            value = getattr(self, name)
+            if not 0 <= value <= 100:
+                raise ValueError(f"{name} must be in 0-100, got {value}")
+        if self.contrast < 0:
+            raise ValueError(f"contrast must be >= 0, got {self.contrast}")
+        if self.turnpolicy not in _TURNPOLICIES:
+            raise ValueError(
+                f"turnpolicy must be one of {_TURNPOLICIES}, got {self.turnpolicy!r}"
+            )
+        if self.formula not in _IMG_FORMULAS:
+            raise ValueError(
+                f"formula must be one of {_IMG_FORMULAS}, got {self.formula!r}"
+            )
+
+
+def img2svg(image_path: str, profile: Img2SvgProfile) -> str:
+    """Trace an image's outlines to a standard vector SVG, returned as a str.
+
+    Same Potrace trace as img2vector_gcode (resize, grayscale, white-clip,
+    optional threshold, then outline tracing), but the contours are written
+    as a filled SVG <path> instead of laser G-code — no biarc/arc stage.
+    Inner contours become holes via fill-rule="evenodd", so the result is
+    the filled black silhouette, like potrace.exe's own SVG output.
+
+    Output: a complete SVG document. viewBox is in pixels (width_mm*quality);
+    width/height carry the physical size in mm. The image keeps its natural
+    top-down orientation (no Y-flip, unlike the G-code path).
+
+    Args:
+        image_path: Path to an image (any Pillow-readable format). Color is
+            reduced to gray with the profile's formula.
+        profile: The tracing calibration.
+
+    Returns:
+        The SVG document as a string (write it with your own open(), or
+        encode it — it is not a G-code line iterator).
+
+    Raises:
+        FileNotFoundError: If image_path does not exist.
+    """
+    return _img2vec.convert_svg(image_path, profile)
 
 
 def write_gcode(
