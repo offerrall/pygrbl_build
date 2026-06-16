@@ -10,7 +10,7 @@ from . import _l2l_native
 from . import _svg
 from . import _img2vec
 
-__version__ = "0.0.1"
+__version__ = "0.1.0"
 
 __all__ = [
     "__version__",
