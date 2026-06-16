@@ -8,6 +8,7 @@ from PIL import Image
 
 from . import _l2l_native
 from . import _svg
+from . import _img2vec
 
 __version__ = "0.0.1"
 
@@ -17,6 +18,8 @@ __all__ = [
     "l2l_gcode",
     "SvgProfile",
     "svg_gcode",
+    "Img2VectorProfile",
+    "img2vector_gcode",
     "write_gcode",
 ]
 
@@ -406,6 +409,183 @@ def svg_gcode(svg_path: str, profile: SvgProfile) -> Iterator[str]:
     """
     body = _svg.convert(svg_path, profile)
     return chain(_svg_header(svg_path, profile), body, ("M5 S0", "G0 X0 Y0"))
+
+
+_TURNPOLICIES = ("minority", "majority", "right", "black", "white")
+_IMG_FORMULAS = (
+    "simple_average", "weight_average", "optical_correct", "custom"
+)
+
+
+@dataclass(frozen=True)
+class Img2VectorProfile:
+    """Image vector-tracing calibration: one machine/material recipe for
+    the img2vector_gcode algorithm. Frozen and validated, like the others.
+
+    This is LaserGRBL's "Vectorize!" mode: the image is reduced to black
+    and white, Potrace traces its outlines as closed contours of lines and
+    cubic Beziers, and each Bezier is emitted as G2/G3 arcs (or a G1
+    fallback). v1 traces outlines only — no interior filling.
+
+    The defaults follow Potrace's classic settings (smooth curves,
+    optimization on), which give the best trace out of the box. LaserGRBL's
+    own UI defaults differ (smoothing/optimize off → alphamax=0.0,
+    opticurve=False); set those explicitly to mimic the desktop app.
+
+    Attributes:
+        width_mm: Physical width of the engraving in mm. Height follows the
+            image's aspect ratio.
+        quality: Tracing resolution in pixels per mm (LaserGRBL's vector
+            "Quality"). The bitmap is width_mm*quality px wide; coordinates
+            are divided by this to get millimetres. 10 is the desktop
+            default.
+        feed: Tracing feed rate in mm/min (LaserGRBL's BorderSpeed).
+        s_max: Laser power (S) while the beam is down. With support_pwm the
+            beam toggles S{s_max}/S0.
+        support_pwm: True emits S-word power control (S{s_max} down, S0 up),
+            the GRBL diode-laser norm. False toggles with laser_on/laser_off.
+        laser_on: "M3" (constant power) or "M4" (dynamic power).
+        laser_off: Beam-off command, normally "M5".
+        turdsize: Despeckle. Contours with area <= turdsize are dropped.
+        turnpolicy: Diagonal-ambiguity rule: "minority", "majority",
+            "right", "black" or "white". Potrace's default is "minority".
+        alphamax: Corner threshold (0.0-1.334). Higher = rounder corners;
+            0.0 makes every vertex a sharp corner.
+        opttolerance: Curve-optimization tolerance. Higher = more aggressive
+            merging of Beziers.
+        opticurve: Run the curve-optimization stage (Potrace's optiCurve).
+        formula: Grayscale weights: "simple_average", "weight_average",
+            "optical_correct" or "custom". Grayscale inputs are forced to
+            "simple_average", exactly like LaserGRBL.
+        red, green, blue: Per-channel weights (0-100), only used by "custom".
+        brightness: 0-100. 100 = unchanged; lower darkens.
+        contrast: 0-100+. Linear channel scale (100 = unchanged).
+        white_clip: Near-white clip (0-100). Pixels within this of pure
+            white are dropped (treated as background). 0 disables it.
+        threshold: Binarization cut 0-100, only applied when use_threshold.
+        use_threshold: Apply the threshold cut before tracing. When False
+            the gray image still gets binarized by Potrace at R+G+B<382.5.
+        offset_x: X offset in mm added to every coordinate.
+        offset_y: Y offset in mm added to every coordinate.
+
+    Raises:
+        TypeError: On construction, if a field has the wrong type.
+        ValueError: On construction, if a numeric field is out of range,
+            laser_on is not "M3"/"M4", or turnpolicy/formula are not
+            recognized.
+    """
+
+    width_mm: float
+    quality: float = 10.0
+    feed: int = 1000
+    s_max: int = 1000
+    support_pwm: bool = True
+    laser_on: str = "M3"
+    laser_off: str = "M5"
+    turdsize: int = 2
+    turnpolicy: str = "minority"
+    alphamax: float = 1.0
+    opttolerance: float = 0.2
+    opticurve: bool = True
+    formula: str = "simple_average"
+    red: int = 100
+    green: int = 100
+    blue: int = 100
+    brightness: int = 100
+    contrast: int = 100
+    white_clip: int = 5
+    threshold: int = 50
+    use_threshold: bool = False
+    offset_x: float = 0.0
+    offset_y: float = 0.0
+
+    def __post_init__(self) -> None:
+        for name in ("width_mm", "quality", "alphamax", "opttolerance",
+                     "offset_x", "offset_y"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise TypeError(f"{name} must be a number, got {type(value).__name__}")
+        for name in ("feed", "s_max", "turdsize", "red", "green", "blue",
+                     "brightness", "contrast", "white_clip", "threshold"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise TypeError(f"{name} must be int, got {type(value).__name__}")
+        for name in ("support_pwm", "opticurve", "use_threshold"):
+            if not isinstance(getattr(self, name), bool):
+                raise TypeError(f"{name} must be bool")
+
+        if self.width_mm <= 0:
+            raise ValueError(f"width_mm must be positive, got {self.width_mm}")
+        if self.quality <= 0:
+            raise ValueError(f"quality must be positive, got {self.quality}")
+        if self.feed <= 0:
+            raise ValueError(f"feed must be positive, got {self.feed}")
+        if self.s_max < 0:
+            raise ValueError(f"s_max must be >= 0, got {self.s_max}")
+        if self.turdsize < 0:
+            raise ValueError(f"turdsize must be >= 0, got {self.turdsize}")
+        if self.alphamax < 0:
+            raise ValueError(f"alphamax must be >= 0, got {self.alphamax}")
+        if self.opttolerance < 0:
+            raise ValueError(f"opttolerance must be >= 0, got {self.opttolerance}")
+        for name in ("red", "green", "blue", "brightness", "white_clip",
+                     "threshold"):
+            value = getattr(self, name)
+            if not 0 <= value <= 100:
+                raise ValueError(f"{name} must be in 0-100, got {value}")
+        if self.contrast < 0:
+            raise ValueError(f"contrast must be >= 0, got {self.contrast}")
+        if self.laser_on not in ("M3", "M4"):
+            raise ValueError(f"laser_on must be 'M3' or 'M4', got {self.laser_on!r}")
+        if self.turnpolicy not in _TURNPOLICIES:
+            raise ValueError(
+                f"turnpolicy must be one of {_TURNPOLICIES}, got {self.turnpolicy!r}"
+            )
+        if self.formula not in _IMG_FORMULAS:
+            raise ValueError(
+                f"formula must be one of {_IMG_FORMULAS}, got {self.formula!r}"
+            )
+
+
+def _img2vec_header(image_path: str, profile: Img2VectorProfile) -> list:
+    """Traceability/setup preamble: library version, source hash, the full
+    profile and the modal setup (absolute, mm, beam off, feed)."""
+    return [
+        f"; pygrbl_build v{__version__}",
+        f"; image: {Path(image_path).name} sha256:{_file_sha256(image_path)}",
+        f"; profile: {profile}",
+        "G90",
+        "G21",
+        f"{profile.laser_on} S0",
+        f"G1 F{profile.feed}",
+    ]
+
+
+def img2vector_gcode(image_path: str, profile: Img2VectorProfile) -> Iterator[str]:
+    """Generate vector G-code by tracing an image's outlines, line by line.
+
+    Faithful port of LaserGRBL's "Vectorize!": the image is reduced to
+    black/white (resize, grayscale, white-clip, optional threshold),
+    Potrace traces its outlines as closed contours, and each cubic Bezier
+    is approximated by biarcs and emitted as G2/G3 arcs (with a G1
+    fallback). v1 traces outlines only (no interior filling).
+
+    Output: absolute coordinates (G90), millimetres (G21), Y flipped so the
+    drawing grows upward, scaled so width equals width_mm.
+
+    Args:
+        image_path: Path to an image (any Pillow-readable format). Color is
+            reduced to gray with the profile's formula.
+        profile: The calibration to engrave with.
+
+    Returns:
+        Iterator of G-code lines, without trailing newlines.
+
+    Raises:
+        FileNotFoundError: If image_path does not exist.
+    """
+    body = _img2vec.convert(image_path, profile)
+    return chain(_img2vec_header(image_path, profile), body, ("M5 S0", "G0 X0 Y0"))
 
 
 def write_gcode(

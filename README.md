@@ -3,13 +3,18 @@
 [![PyPI](https://img.shields.io/pypi/v/pygrbl_build.svg)](https://pypi.org/project/pygrbl_build/)
 
 A collection of algorithms to generate **G-code for GRBL diode lasers**
-from different sources. Two algorithms today:
+from different sources. Three algorithms today:
 
 - **Line-to-Line** (`l2l_gcode`) — raster engraving from an image, with
   LaserGRBL fidelity.
 - **SVG vector** (`svg_gcode`) — vector tracing from an SVG (paths,
   basic shapes, groups, transforms), a faithful port of LaserGRBL's SVG
   import. Pure Python, no extra dependency.
+- **Image vector** (`img2vector_gcode`) — outline tracing from a raster
+  image (LaserGRBL's "Vectorize!"): the image is reduced to black/white,
+  Potrace traces its outlines as closed contours, and each curve is
+  emitted as G2/G3 arcs. Pure Python, Pillow only. Outlines only today
+  (no interior filling yet).
 
 Part of the **pygrbl** family, a set of libraries to manage GRBL.
 Companion to [`pygrbl_streamer`](https://github.com/offerrall/pygrbl_streamer)
@@ -60,6 +65,24 @@ the output matches the desktop app for the same drawing. `text` and
 `image` elements are skipped — convert text to paths in your editor
 first.
 
+Image vector (`img2vector_gcode` + `Img2VectorProfile`):
+
+```python
+from pygrbl_build import Img2VectorProfile, img2vector_gcode, write_gcode
+
+profile = Img2VectorProfile(width_mm=80.0, quality=10.0, feed=1000, s_max=1000)
+write_gcode(img2vector_gcode("logo.png", profile), "logo.nc")
+```
+
+`img2vector_gcode` is a faithful port of LaserGRBL's "Vectorize!": the
+image is reduced to black/white (resize, grayscale, white-clip, optional
+threshold), Potrace traces its outlines, and each cubic Bezier is
+approximated by biarcs and emitted as `G2`/`G3` arcs (with a `G1`
+fallback). `width_mm` sets the physical width and `quality` the tracing
+resolution in pixels/mm. The `Img2VectorProfile` defaults follow Potrace's
+classic settings (smooth curves, optimization on); set `alphamax=0.0` and
+`opticurve=False` to mimic LaserGRBL's own out-of-the-box UI defaults.
+
 `write_gcode` writes the path verbatim, so you choose the extension
 (`.nc`, `.gcode`, `.g`, ...). It's just a convenience: every `*_gcode`
 generator is a lazy iterator of lines, so anything beyond writing a
@@ -67,4 +90,4 @@ plain file (compression, network shipping, streaming to the machine) is
 the upper layer's job — consume the iterator with whatever sink you need.
 
 Public API: `L2LProfile`, `l2l_gcode`, `SvgProfile`, `svg_gcode`,
-`write_gcode`. See the docstrings.
+`Img2VectorProfile`, `img2vector_gcode`, `write_gcode`. See the docstrings.
