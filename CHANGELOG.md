@@ -2,6 +2,26 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.3.0 - 2026-06-19
+
+### Added
+
+- **G-code bounds & framing** (`get_bounding_box` + `generate_framing_gcode`):
+  the [gcode-bounds](https://github.com/offerrall/gcode-bounds) library
+  folded in as a second C extension (`_gcode_parser`), same C parser as
+  the original (`fast_atof` + line scan, 500MB+ files in seconds).
+  `get_bounding_box` computes the `(min_x, max_x, min_y, max_y)` extent of
+  some G-code; `generate_framing_gcode` traces that box (the framing pass)
+  so the operator can confirm placement before engraving. Rapid moves to
+  the origin (`G0` with `X0`/`Y0`) are skipped so the library's own home
+  moves don't expand the box.
+- `get_bounding_box` accepts the G-code as a file path (`str`/`Path`,
+  opened and streamed in C) **or** as raw content already in memory
+  (`bytes`/`bytearray`, or a multi-line `str`), so it no longer has to
+  exist on disk. The Python wrapper decides which route to take; a new C
+  entry point (`get_bounding_box_buffer`) parses the in-memory buffer with
+  the same per-line logic as the file path.
+
 ## 0.2.0 - 2026-06-16
 
 ### Added

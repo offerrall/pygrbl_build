@@ -11,6 +11,14 @@ setup(
         Extension(
             "pygrbl_build._l2l_native",
             sources=["src/pygrbl_build/_l2l_native.c"],
-        )
+        ),
+        Extension(
+            "pygrbl_build._gcode_parser",
+            sources=[
+                "src/pygrbl_build/_gcode_parser.c",
+                "src/pygrbl_build/gcode_parser.c",
+            ],
+            include_dirs=["src/pygrbl_build"],
+        ),
     ],
 )

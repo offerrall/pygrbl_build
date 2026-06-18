@@ -1,9 +1,10 @@
-# PyGrbl_Build 0.2.0
+# PyGrbl_Build 0.3.0
 
 [![PyPI](https://img.shields.io/pypi/v/pygrbl_build.svg)](https://pypi.org/project/pygrbl_build/)
 
 A collection of algorithms to generate **G-code for GRBL diode lasers**
-from different sources. Four algorithms today:
+from different sources, plus tooling around the G-code itself. Four
+generators today:
 
 - **Line-to-Line** (`l2l_gcode`) — raster engraving from an image, with
   LaserGRBL fidelity.
@@ -20,6 +21,11 @@ from different sources. Four algorithms today:
   SVG instead of G-code. Inner contours become holes (`fill-rule`
   `evenodd`), so you get the filled black silhouette potrace.exe produces.
   Pure Python, Pillow only.
+
+Plus **G-code bounds & framing** (`get_bounding_box` +
+`generate_framing_gcode`): a fast C parser for the bounding box of any
+G-code (file or in-memory) and a framing pass that traces it, so the
+operator can confirm placement before engraving.
 
 Part of the **pygrbl** family, a set of libraries to manage GRBL.
 Companion to [`pygrbl_streamer`](https://github.com/offerrall/pygrbl_streamer)
@@ -109,6 +115,31 @@ is in pixels (`width_mm*quality`) while `width`/`height` carry the
 physical size in mm, and the image keeps its natural top-down
 orientation (no Y-flip, unlike the G-code path).
 
+G-code bounds & framing (`get_bounding_box` + `generate_framing_gcode`):
+
+```python
+from pygrbl_build import get_bounding_box, generate_framing_gcode
+
+# From a file path (opened and streamed in C — handles 500MB+ in seconds)...
+min_x, max_x, min_y, max_y = get_bounding_box("job.nc")
+
+# ...or straight from G-code already in memory, no file needed:
+gcode = "\n".join(svg_gcode("logo.svg", SvgProfile()))
+min_x, max_x, min_y, max_y = get_bounding_box(gcode)          # str
+min_x, max_x, min_y, max_y = get_bounding_box(gcode.encode()) # or bytes
+
+frame = generate_framing_gcode(min_x, max_x, min_y, max_y, power=10.0, speed=1000)
+```
+
+`get_bounding_box` is the original [gcode-bounds](https://github.com/offerrall/gcode-bounds)
+C parser folded in. It accepts a file path (`str`/`Path`, opened and
+streamed in C) or the G-code content directly (`bytes`, or a multi-line
+`str`), so it never has to exist on disk — the Python wrapper picks the
+route. Only X/Y are considered; rapid moves to the origin (`G0` with
+`X0`/`Y0`) are skipped so home moves don't expand the box.
+`generate_framing_gcode` returns the perimeter trace as a list of lines
+(`power` is 0-100, `speed` in mm/min).
+
 `write_gcode` writes the path verbatim, so you choose the extension
 (`.nc`, `.gcode`, `.g`, ...). It's just a convenience: every `*_gcode`
 generator is a lazy iterator of lines, so anything beyond writing a
@@ -117,4 +148,5 @@ the upper layer's job — consume the iterator with whatever sink you need.
 
 Public API: `L2LProfile`, `l2l_gcode`, `SvgProfile`, `svg_gcode`,
 `Img2VectorProfile`, `img2vector_gcode`, `Img2SvgProfile`, `img2svg`,
-`write_gcode`. See the docstrings.
+`get_bounding_box`, `generate_framing_gcode`, `write_gcode`. See the
+docstrings.

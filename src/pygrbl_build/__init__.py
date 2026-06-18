@@ -1,16 +1,18 @@
 import hashlib
+import os
 from dataclasses import dataclass
 from itertools import chain
 from pathlib import Path
-from typing import Iterable, Iterator, Optional, Tuple
+from typing import Iterable, Iterator, List, Optional, Tuple, Union
 
 from PIL import Image
 
 from . import _l2l_native
 from . import _svg
 from . import _img2vec
+from . import _gcode_parser
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 __all__ = [
     "__version__",
@@ -22,6 +24,8 @@ __all__ = [
     "img2vector_gcode",
     "Img2SvgProfile",
     "img2svg",
+    "get_bounding_box",
+    "generate_framing_gcode",
     "write_gcode",
 ]
 
@@ -719,6 +723,100 @@ def img2svg(image_path: str, profile: Img2SvgProfile) -> str:
         FileNotFoundError: If image_path does not exist.
     """
     return _img2vec.convert_svg(image_path, profile)
+
+
+def get_bounding_box(
+    source: Union[str, Path, bytes, bytearray],
+) -> Tuple[float, float, float, float]:
+    """Compute the (min_x, max_x, min_y, max_y) extent of some G-code.
+
+    The C engine does the parsing either way; this Python wrapper just
+    decides whether to open a file or parse bytes already in memory, so
+    the G-code never has to exist on disk:
+
+        - bytes / bytearray: parsed directly in memory.
+        - Path: always a filesystem path — opened and streamed in C
+          (the fast route for huge files).
+        - str: a filesystem path when it points to an existing file
+          (streamed in C); otherwise treated as raw G-code text and
+          parsed in memory. So passing a path string and passing the
+          G-code itself both just work.
+
+    Only X and Y are considered (Z is ignored). Rapid moves to the origin
+    (lines starting with "G0" that contain X0 and Y0) are skipped, so the
+    library's own home moves don't blow the box out to (0, 0).
+
+    Args:
+        source: A file path (str/Path) or raw G-code (str/bytes).
+
+    Returns:
+        (min_x, max_x, min_y, max_y).
+
+    Raises:
+        FileNotFoundError: If source is a Path that does not exist.
+        ValueError: If no X/Y coordinates are found.
+    """
+    if isinstance(source, (bytes, bytearray)):
+        return _gcode_parser.get_bounding_box_buffer(source)
+    if isinstance(source, Path):
+        return _gcode_parser.get_bounding_box(str(source))
+    if isinstance(source, str):
+        # A real, single-line path is opened (and streamed) in C; anything
+        # else is treated as the G-code text itself.
+        if "\n" not in source and os.path.isfile(source):
+            return _gcode_parser.get_bounding_box(source)
+        return _gcode_parser.get_bounding_box_buffer(source.encode())
+    raise TypeError(
+        f"source must be str, Path or bytes, got {type(source).__name__}"
+    )
+
+
+def generate_framing_gcode(
+    min_x: float,
+    max_x: float,
+    min_y: float,
+    max_y: float,
+    power: float = 10.0,
+    speed: int = 1000,
+) -> List[str]:
+    """Generate G-code that traces a bounding box (the framing pass).
+
+    Run it before the job so the operator can confirm where the work will
+    land on the material. Pair it with get_bounding_box.
+
+    Args:
+        min_x, max_x, min_y, max_y: Bounding box coordinates (e.g. from
+            get_bounding_box).
+        power: Laser power percentage (0-100).
+        speed: Feed rate in mm/min.
+
+    Returns:
+        List of G-code command strings.
+
+    Raises:
+        ValueError: If min >= max on either axis, power is outside 0-100,
+            or speed is not positive.
+    """
+    if min_x >= max_x:
+        raise ValueError(f"min_x ({min_x}) must be less than max_x ({max_x})")
+    if min_y >= max_y:
+        raise ValueError(f"min_y ({min_y}) must be less than max_y ({max_y})")
+
+    if not (0 <= power <= 100):
+        raise ValueError(f"Power must be between 0 and 100, got {power}")
+    if speed <= 0:
+        raise ValueError(f"Feed rate must be positive, got {speed}")
+
+    return [
+        f"G0 X{min_x} Y{min_y}",
+        f"M3 S{power:.3f} F{speed}",
+        f"G1 Y{max_y}",
+        f"G1 X{max_x}",
+        f"G1 Y{min_y}",
+        f"G1 X{min_x}",
+        "M5",
+        "G0 X0 Y0",
+    ]
 
 
 def write_gcode(
