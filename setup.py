@@ -14,11 +14,7 @@ setup(
         ),
         Extension(
             "pygrbl_build._gcode_parser",
-            sources=[
-                "src/pygrbl_build/_gcode_parser.c",
-                "src/pygrbl_build/gcode_parser.c",
-            ],
-            include_dirs=["src/pygrbl_build"],
+            sources=["src/pygrbl_build/_gcode_parser.c"],
         ),
     ],
 )
