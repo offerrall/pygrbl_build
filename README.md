@@ -28,7 +28,7 @@ G-code (file or in-memory) and a framing pass that traces it, so the
 operator can confirm placement before engraving.
 
 Part of the **pygrbl** family, a set of libraries to manage GRBL.
-Companion to [`pygrbl_streamer`](https://github.com/offerrall/pygrbl_streamer) and [`pygrbl_streamer`](https://github.com/offerrall/pygrbl-server)
+Companion to [`pygrbl_streamer`](https://github.com/offerrall/pygrbl_streamer) and [`pygrbl_server`](https://github.com/offerrall/pygrbl-server)
 
 ## Speed
 
