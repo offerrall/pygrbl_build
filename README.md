@@ -9,7 +9,7 @@ generators today:
 - **Line-to-Line** (`l2l_gcode`) — raster engraving from an image, with
   LaserGRBL fidelity.
 - **SVG vector** (`svg_gcode`) — vector tracing from an SVG (paths,
-  basic shapes, groups, transforms), a faithful port of LaserGRBL's SVG
+  basic shapes, groups, transforms), a faithful port of LaserGRBL's SVG 
   import. Pure Python, no extra dependency.
 - **Image vector** (`img2vector_gcode`) — outline tracing from a raster
   image (LaserGRBL's "Vectorize!"): the image is reduced to black/white,
@@ -28,7 +28,7 @@ G-code (file or in-memory) and a framing pass that traces it, so the
 operator can confirm placement before engraving.
 
 Part of the **pygrbl** family, a set of libraries to manage GRBL.
-Companion to [`pygrbl_streamer`](https://github.com/offerrall/pygrbl_streamer)
+Companion to [`pygrbl_streamer`](https://github.com/offerrall/pygrbl_streamer) and [`pygrbl_streamer`](https://github.com/offerrall/pygrbl-server)
 
 ## Speed
 
