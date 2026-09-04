@@ -1208,15 +1208,10 @@ class _SvgConverter:
         self.pen_is_down = True
 
 
-def convert(svg_path, profile):
-    """Parse the SVG file and return the body G-code as a list of lines
+def convert(svg_content, profile):
+    """Parse SVG bytes and return the body G-code as a list of lines
     (no header/footer, no trailing newlines)."""
-    from pathlib import Path
-
-    p = Path(svg_path)
-    if not p.exists():
-        raise FileNotFoundError(svg_path)
-    root = ET.fromstring(p.read_bytes())
+    root = ET.fromstring(svg_content)
     conv = _SvgConverter(profile)
     conv.start(root)
     return conv.em.lines

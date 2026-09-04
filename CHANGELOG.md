@@ -6,16 +6,19 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
-- `l2l_gcode` now accepts encoded image `bytes`, `bytearray`, and loaded
-  `PIL.Image.Image` instances in addition to file paths. In-memory services can
-  generate and stream raster G-code without creating temporary image files.
+- All image APIs (`l2l_gcode`, `img2vector_gcode`, and `img2svg`) now accept
+  encoded image `bytes`, `bytearray`, and loaded `PIL.Image.Image` instances in
+  addition to file paths.
+- `svg_gcode` now accepts SVG XML as `str`, `bytes`, or `bytearray` in addition
+  to file paths.
 - In-memory inputs receive the same traceability header as paths: encoded bytes
   are hashed directly, while Pillow images are hashed from their mode, size,
   and pixel content.
 
 ### Changed
 
-- Exported the `ImageSource` type alias describing every accepted raster input.
+- Exported `ImageSource` and `SvgSource` type aliases describing every accepted
+  input.
 
 ## 0.3.0 - 2026-06-19
 

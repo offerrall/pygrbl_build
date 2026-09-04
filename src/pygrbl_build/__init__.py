@@ -16,11 +16,13 @@ from . import _gcode_parser
 __version__ = "0.4.0"
 
 ImageSource = Union[str, os.PathLike, bytes, bytearray, Image.Image]
+SvgSource = Union[str, os.PathLike, bytes, bytearray]
 
 __all__ = [
     "__version__",
     "L2LProfile",
     "ImageSource",
+    "SvgSource",
     "l2l_gcode",
     "SvgProfile",
     "svg_gcode",
@@ -166,6 +168,24 @@ def _open_source(source: ImageSource) -> Tuple[Image.Image, str, str]:
         path = Path(source)
         return Image.open(path), path.name, _file_sha256(path)
     raise TypeError("image source must be a path, bytes, bytearray, or PIL.Image.Image")
+
+
+def _open_svg_source(source: SvgSource) -> Tuple[bytes, str, str]:
+    if isinstance(source, (bytes, bytearray)):
+        content = bytes(source)
+        return content, "<memory>", hashlib.sha256(content).hexdigest()[:12]
+    if isinstance(source, os.PathLike):
+        path = Path(source)
+        content = path.read_bytes()
+        return content, path.name, hashlib.sha256(content).hexdigest()[:12]
+    if isinstance(source, str):
+        if source.lstrip().startswith("<"):
+            content = source.encode("utf-8")
+            return content, "<memory>", hashlib.sha256(content).hexdigest()[:12]
+        path = Path(source)
+        content = path.read_bytes()
+        return content, path.name, hashlib.sha256(content).hexdigest()[:12]
+    raise TypeError("SVG source must be a path, XML string, bytes, or bytearray")
 
 
 def _open_resized(source: ImageSource, p: L2LProfile) -> Tuple[Image.Image, bool, str, str]:
@@ -400,12 +420,12 @@ class SvgProfile:
             )
 
 
-def _svg_header(svg_path: str, profile: SvgProfile) -> list:
+def _svg_header(source_name: str, source_hash: str, profile: SvgProfile) -> list:
     """Traceability/setup preamble: library version, source hash, the
     full profile and the modal setup (absolute, mm, beam off)."""
     return [
         f"; pygrbl_build v{__version__}",
-        f"; svg: {Path(svg_path).name} sha256:{_file_sha256(svg_path)}",
+        f"; svg: {source_name} sha256:{source_hash}",
         f"; profile: {profile}",
         "G90",
         "G21",
@@ -413,7 +433,7 @@ def _svg_header(svg_path: str, profile: SvgProfile) -> list:
     ]
 
 
-def svg_gcode(svg_path: str, profile: SvgProfile) -> Iterator[str]:
+def svg_gcode(source: SvgSource, profile: SvgProfile) -> Iterator[str]:
     """Generate vector G-code from an SVG, line by line.
 
     Faithful port of LaserGRBL's SVG import: parses paths, basic shapes
@@ -428,18 +448,24 @@ def svg_gcode(svg_path: str, profile: SvgProfile) -> Iterator[str]:
     SVG's width/height/viewBox exactly as LaserGRBL computes it.
 
     Args:
-        svg_path: Path to an .svg file.
+        source: Path to an SVG file, XML string, bytes, or bytearray.
         profile: The calibration to engrave with.
 
     Returns:
         Iterator of G-code lines, without trailing newlines.
 
     Raises:
-        FileNotFoundError: If svg_path does not exist.
+        FileNotFoundError: If a supplied path does not exist.
+        TypeError: If source is not a supported SVG source.
         xml.etree.ElementTree.ParseError: If the file is not valid XML.
     """
-    body = _svg.convert(svg_path, profile)
-    return chain(_svg_header(svg_path, profile), body, ("M5 S0", "G0 X0 Y0"))
+    content, source_name, source_hash = _open_svg_source(source)
+    body = _svg.convert(content, profile)
+    return chain(
+        _svg_header(source_name, source_hash, profile),
+        body,
+        ("M5 S0", "G0 X0 Y0"),
+    )
 
 
 _TURNPOLICIES = ("minority", "majority", "right", "black", "white")
@@ -578,12 +604,12 @@ class Img2VectorProfile:
             )
 
 
-def _img2vec_header(image_path: str, profile: Img2VectorProfile) -> list:
+def _img2vec_header(source_name: str, source_hash: str, profile: Img2VectorProfile) -> list:
     """Traceability/setup preamble: library version, source hash, the full
     profile and the modal setup (absolute, mm, beam off, feed)."""
     return [
         f"; pygrbl_build v{__version__}",
-        f"; image: {Path(image_path).name} sha256:{_file_sha256(image_path)}",
+        f"; image: {source_name} sha256:{source_hash}",
         f"; profile: {profile}",
         "G90",
         "G21",
@@ -592,7 +618,7 @@ def _img2vec_header(image_path: str, profile: Img2VectorProfile) -> list:
     ]
 
 
-def img2vector_gcode(image_path: str, profile: Img2VectorProfile) -> Iterator[str]:
+def img2vector_gcode(source: ImageSource, profile: Img2VectorProfile) -> Iterator[str]:
     """Generate vector G-code by tracing an image's outlines, line by line.
 
     Faithful port of LaserGRBL's "Vectorize!": the image is reduced to
@@ -605,18 +631,24 @@ def img2vector_gcode(image_path: str, profile: Img2VectorProfile) -> Iterator[st
     drawing grows upward, scaled so width equals width_mm.
 
     Args:
-        image_path: Path to an image (any Pillow-readable format). Color is
-            reduced to gray with the profile's formula.
+        source: Path, encoded image bytes, bytearray, or Pillow image. Color
+            is reduced to gray with the profile's formula.
         profile: The calibration to engrave with.
 
     Returns:
         Iterator of G-code lines, without trailing newlines.
 
     Raises:
-        FileNotFoundError: If image_path does not exist.
+        FileNotFoundError: If a supplied path does not exist.
+        TypeError: If source is not a supported image source.
     """
-    body = _img2vec.convert(image_path, profile)
-    return chain(_img2vec_header(image_path, profile), body, ("M5 S0", "G0 X0 Y0"))
+    image, source_name, source_hash = _open_source(source)
+    body = _img2vec.convert(image, profile)
+    return chain(
+        _img2vec_header(source_name, source_hash, profile),
+        body,
+        ("M5 S0", "G0 X0 Y0"),
+    )
 
 
 @dataclass(frozen=True)
@@ -722,7 +754,7 @@ class Img2SvgProfile:
             )
 
 
-def img2svg(image_path: str, profile: Img2SvgProfile) -> str:
+def img2svg(source: ImageSource, profile: Img2SvgProfile) -> str:
     """Trace an image's outlines to a standard vector SVG, returned as a str.
 
     Same Potrace trace as img2vector_gcode (resize, grayscale, white-clip,
@@ -736,8 +768,8 @@ def img2svg(image_path: str, profile: Img2SvgProfile) -> str:
     top-down orientation (no Y-flip, unlike the G-code path).
 
     Args:
-        image_path: Path to an image (any Pillow-readable format). Color is
-            reduced to gray with the profile's formula.
+        source: Path, encoded image bytes, bytearray, or Pillow image. Color
+            is reduced to gray with the profile's formula.
         profile: The tracing calibration.
 
     Returns:
@@ -745,9 +777,11 @@ def img2svg(image_path: str, profile: Img2SvgProfile) -> str:
         encode it — it is not a G-code line iterator).
 
     Raises:
-        FileNotFoundError: If image_path does not exist.
+        FileNotFoundError: If a supplied path does not exist.
+        TypeError: If source is not a supported image source.
     """
-    return _img2vec.convert_svg(image_path, profile)
+    image, _, _ = _open_source(source)
+    return _img2vec.convert_svg(image, profile)
 
 
 def get_bounding_box(

@@ -1478,7 +1478,7 @@ def _is_grayscale(img):
     return True
 
 
-def _preprocess(image_path, profile, flip_y=True):
+def _preprocess(image_source, profile, flip_y=True):
     """Open, resize and binarize an image into Potrace's input bitmap.
 
     Returns (w, h, data) where data is a bytearray of 0/1 (1 = black,
@@ -1487,14 +1487,9 @@ def _preprocess(image_path, profile, flip_y=True):
     upward. The SVG path passes ``flip_y=False`` to keep the image's
     natural top-down orientation (SVG's origin is top-left, Y down).
     """
-    from pathlib import Path
-
     from PIL import Image
 
-    if not Path(image_path).exists():
-        raise FileNotFoundError(image_path)
-
-    img = Image.open(image_path)
+    img = image_source if isinstance(image_source, Image.Image) else Image.open(image_source)
     img = img.convert("RGBA")
 
     # Target pixel size: width drives it, height follows the aspect ratio

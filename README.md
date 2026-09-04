@@ -62,9 +62,9 @@ profile = L2LProfile(width_mm=300.0, lines_per_mm=10.0, feed=3000, s_max=100)
 write_gcode(l2l_gcode("shield.png", profile), "shield.nc")
 ```
 
-`l2l_gcode` also accepts encoded image `bytes`, `bytearray`, or an already
-loaded `PIL.Image.Image`. This allows in-memory services to stream G-code
-without writing a temporary image:
+All image APIs (`l2l_gcode`, `img2vector_gcode`, and `img2svg`) also accept
+encoded image `bytes`, `bytearray`, or an already loaded `PIL.Image.Image`.
+This allows in-memory services to work without writing a temporary image:
 
 ```python
 from PIL import Image
@@ -83,6 +83,9 @@ from pygrbl_build import SvgProfile, svg_gcode, write_gcode
 profile = SvgProfile(feed=1000, s_max=255)
 write_gcode(svg_gcode("logo.svg", profile), "logo.nc")
 ```
+
+`svg_gcode` accepts a path as before, or the SVG XML directly as `str`, `bytes`,
+or `bytearray`.
 
 `SvgProfile`'s defaults reproduce LaserGRBL's own SVG-import defaults, so
 the output matches the desktop app for the same drawing. `text` and
