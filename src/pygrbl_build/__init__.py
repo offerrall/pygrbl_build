@@ -13,7 +13,7 @@ from . import _svg
 from . import _img2vec
 from . import _gcode_parser
 
-__version__ = "0.4.0"
+__version__ = "0.4.1"
 
 ImageSource = Union[str, os.PathLike, bytes, bytearray, Image.Image]
 SvgSource = Union[str, os.PathLike, bytes, bytearray]

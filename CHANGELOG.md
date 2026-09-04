@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.4.1 - 2026-09-04
+
+### Changed
+
+- Line-to-Line raster output now uses GRBL's modal motion state: each scan row
+  emits one `G1` after its `G0`, then omits redundant `G1` words from the
+  remaining linear moves. Motion, power, coordinates, lazy iteration and
+  constant-memory behaviour are unchanged while the serial payload is smaller.
+
 ## 0.4.0 - 2026-09-04
 
 ### Added

@@ -47,6 +47,29 @@ def test_l2l_rejects_unsupported_source():
         l2l_gcode(object(), L2LProfile(width_mm=1))
 
 
+def test_l2l_omits_only_redundant_modal_g1_words():
+    image = Image.new("L", (6, 2), 255)
+    image.putdata((0, 64, 128, 192, 64, 0) * 2)
+    commands = list(l2l_gcode(image, L2LProfile(width_mm=6, lines_per_mm=1)))
+    body = commands[8:-2]
+
+    rapid_rows = linear_starts = compact_linear_moves = 0
+    motion = None
+    for command in body:
+        if command.startswith("G0"):
+            motion = "G0"
+            rapid_rows += 1
+        elif command.startswith("G1"):
+            motion = "G1"
+            linear_starts += 1
+        elif command.startswith("X"):
+            assert motion == "G1"
+            compact_linear_moves += 1
+
+    assert rapid_rows == linear_starts == 2
+    assert compact_linear_moves > 0
+
+
 def test_image_vector_apis_accept_path_bytes_bytearray_and_pillow(tmp_path):
     content = png()
     path = tmp_path / "source.png"

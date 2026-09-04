@@ -220,7 +220,9 @@ fill_row(L2LIter *it, int row)
         for (int i = first; i <= last; i++) {
             int xe = (i + 1 < n) ? rs[i + 1] : w;  /* run end */
             int pwv = rp[i];
-            PUT_LIT("G1 X"); PUT(it->xs[xe], it->xs_n[xe]);
+            if (i == first) PUT_LIT("G1 X");
+            else            PUT_LIT("X");
+            PUT(it->xs[xe], it->xs_n[xe]);
             PUT_LIT(" S");   PUT(it->ss[pwv], it->ss_n[pwv]);
             END_LINE();
         }
@@ -229,7 +231,9 @@ fill_row(L2LIter *it, int row)
         for (int i = last; i >= first; i--) {
             int xst = rs[i];                       /* run start */
             int pwv = rp[i];
-            PUT_LIT("G1 X"); PUT(it->xs[xst], it->xs_n[xst]);
+            if (i == last) PUT_LIT("G1 X");
+            else           PUT_LIT("X");
+            PUT(it->xs[xst], it->xs_n[xst]);
             PUT_LIT(" S");   PUT(it->ss[pwv], it->ss_n[pwv]);
             END_LINE();
         }
@@ -238,7 +242,7 @@ fill_row(L2LIter *it, int row)
     if (it->overscan) {
         const char **oout = ltr ? it->xp : it->xm;
         const int *oout_n = ltr ? it->xp_n : it->xm_n;
-        PUT_LIT("G1 X"); PUT(oout[exit_], oout_n[exit_]);
+        PUT_LIT("X"); PUT(oout[exit_], oout_n[exit_]);
         PUT_LIT(" S0");  END_LINE();
     }
 
