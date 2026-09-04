@@ -1,4 +1,4 @@
-# PyGrbl_Build 0.4.0
+# PyGrbl_Build 0.4.1
 
 [![PyPI](https://img.shields.io/pypi/v/pygrbl_build.svg)](https://pypi.org/project/pygrbl_build/)
 
