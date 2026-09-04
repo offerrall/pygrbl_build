@@ -1,4 +1,4 @@
-# PyGrbl_Build 0.3.0
+# PyGrbl_Build 0.4.0
 
 [![PyPI](https://img.shields.io/pypi/v/pygrbl_build.svg)](https://pypi.org/project/pygrbl_build/)
 
@@ -60,6 +60,19 @@ from pygrbl_build import L2LProfile, l2l_gcode, write_gcode
 
 profile = L2LProfile(width_mm=300.0, lines_per_mm=10.0, feed=3000, s_max=100)
 write_gcode(l2l_gcode("shield.png", profile), "shield.nc")
+```
+
+`l2l_gcode` also accepts encoded image `bytes`, `bytearray`, or an already
+loaded `PIL.Image.Image`. This allows in-memory services to stream G-code
+without writing a temporary image:
+
+```python
+from PIL import Image
+
+with open("shield.png", "rb") as source:
+    from_bytes = l2l_gcode(source.read(), profile)
+
+from_pillow = l2l_gcode(Image.open("shield.png"), profile)
 ```
 
 SVG vector (`svg_gcode` + `SvgProfile`):

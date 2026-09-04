@@ -1,6 +1,7 @@
 import hashlib
 import os
 from dataclasses import dataclass
+from io import BytesIO
 from itertools import chain
 from pathlib import Path
 from typing import Iterable, Iterator, List, Optional, Tuple, Union
@@ -12,11 +13,14 @@ from . import _svg
 from . import _img2vec
 from . import _gcode_parser
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
+
+ImageSource = Union[str, os.PathLike, bytes, bytearray, Image.Image]
 
 __all__ = [
     "__version__",
     "L2LProfile",
+    "ImageSource",
     "l2l_gcode",
     "SvgProfile",
     "svg_gcode",
@@ -120,7 +124,7 @@ class L2LProfile:
             raise ValueError(f"laser_on must be 'M3' or 'M4', got {self.laser_on!r}")
 
 
-def _ensure_visually_gray(img: Image.Image, image_path: str) -> None:
+def _ensure_visually_gray(img: Image.Image, source_name: str) -> None:
     """Reject color images, with LaserGRBL's own test.
 
     Samples every 10th pixel; if any sample's RGB channels differ by 20
@@ -141,25 +145,41 @@ def _ensure_visually_gray(img: Image.Image, image_path: str) -> None:
             maxdiff = max(r, g, b) - min(r, g, b)
             if maxdiff >= _GRAY_MAXDIFF:
                 raise ValueError(
-                    f"{image_path!r} is a color image (max channel difference "
+                    f"{source_name!r} is a color image (max channel difference "
                     f"{maxdiff} >= {_GRAY_MAXDIFF}). Convert it to grayscale in "
                     "your image editor first: color conversion is editing work, "
                     "and your editor does it better."
                 )
 
 
-def _open_resized(image_path: str, p: L2LProfile) -> Tuple[Image.Image, bool]:
+def _open_source(source: ImageSource) -> Tuple[Image.Image, str, str]:
+    if isinstance(source, Image.Image):
+        digest = hashlib.sha256()
+        digest.update(source.mode.encode("ascii"))
+        digest.update(f"{source.width}x{source.height}".encode("ascii"))
+        digest.update(source.tobytes())
+        return source, "<Pillow image>", digest.hexdigest()[:12]
+    if isinstance(source, (bytes, bytearray)):
+        content = bytes(source)
+        return Image.open(BytesIO(content)), "<memory>", hashlib.sha256(content).hexdigest()[:12]
+    if isinstance(source, (str, os.PathLike)):
+        path = Path(source)
+        return Image.open(path), path.name, _file_sha256(path)
+    raise TypeError("image source must be a path, bytes, bytearray, or PIL.Image.Image")
+
+
+def _open_resized(source: ImageSource, p: L2LProfile) -> Tuple[Image.Image, bool, str, str]:
     """Open, validate and resize.
 
     The BICUBIC resize is the project's fidelity boundary. Returns the
     resized image (mode "L" or "LA") and whether it carries alpha.
 
     Raises:
-        FileNotFoundError: If image_path does not exist.
+        FileNotFoundError: If a supplied path does not exist.
         ValueError: If the image is color (see _ensure_visually_gray).
     """
-    img = Image.open(image_path)
-    _ensure_visually_gray(img, image_path)
+    img, source_name, source_hash = _open_source(source)
+    _ensure_visually_gray(img, source_name)
 
     has_alpha = img.mode in ("RGBA", "LA", "PA") or (
         img.mode == "P" and "transparency" in img.info
@@ -177,21 +197,21 @@ def _open_resized(image_path: str, p: L2LProfile) -> Tuple[Image.Image, bool]:
     # parity holds on both sides.
     if (px_w, px_h) != img.size:
         img = img.resize((px_w, px_h), Image.BICUBIC)
-    return img, has_alpha
+    return img, has_alpha, source_name, source_hash
 
 
-def _file_sha256(path: str, chars: int = 12) -> str:
+def _file_sha256(path: Union[str, os.PathLike], chars: int = 12) -> str:
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()[:chars]
 
 
-def _gcode_header(image_path: str, profile: L2LProfile, w: int, h: int) -> list:
+def _gcode_header(source_name: str, source_hash: str, profile: L2LProfile, w: int, h: int) -> list:
     """The traceability/setup preamble: library version, image hash,
     the complete profile and the modal setup, so any engraved piece can
     be traced back to its exact recipe.
     """
     return [
         f"; pygrbl_build v{__version__}",
-        f"; image: {Path(image_path).name} sha256:{_file_sha256(image_path)}",
+        f"; image: {source_name} sha256:{source_hash}",
         f"; profile: {profile}",
         f"; {w}x{h} px @ {profile.lines_per_mm} lines/mm",
         "G90",
@@ -201,7 +221,7 @@ def _gcode_header(image_path: str, profile: L2LProfile, w: int, h: int) -> list:
     ]
 
 
-def l2l_gcode(image_path: str, profile: L2LProfile) -> Iterator[str]:
+def l2l_gcode(source: ImageSource, profile: L2LProfile) -> Iterator[str]:
     """Generate Line-to-Line raster G-code, line by line.
 
     Lazy generator: pairs naturally with pygrbl_streamer's stream() —
@@ -219,19 +239,20 @@ def l2l_gcode(image_path: str, profile: L2LProfile) -> Iterator[str]:
     fully blank rows are skipped entirely.
 
     Args:
-        image_path: Path to a grayscale (or B/W) image. Color images
-            are rejected — convert in your editor first. Transparency
-            is honored: transparent = blank.
+        source: Path, encoded image bytes, bytearray, or Pillow image.
+            Color images are rejected — convert in your editor first.
+            Transparency is honored: transparent = blank.
         profile: The calibration to engrave with.
 
     Returns:
         Iterator of G-code lines, without trailing newlines.
 
     Raises:
-        FileNotFoundError: If image_path does not exist.
+        FileNotFoundError: If a supplied path does not exist.
+        TypeError: If source is not a supported image source.
         ValueError: If the image is color.
     """
-    img, has_alpha = _open_resized(image_path, profile)
+    img, has_alpha, source_name, source_hash = _open_resized(source, profile)
     w, h = img.size
     px = 1.0 / profile.lines_per_mm
 
@@ -265,7 +286,11 @@ def l2l_gcode(image_path: str, profile: L2LProfile) -> Iterator[str]:
         XM,
         XP,
     )
-    return chain(_gcode_header(image_path, profile, w, h), body, ("M5", "G0 X0 Y0"))
+    return chain(
+        _gcode_header(source_name, source_hash, profile, w, h),
+        body,
+        ("M5", "G0 X0 Y0"),
+    )
 
 
 _FIRMWARES = ("grbl", "smoothie", "marlin", "vigowork")

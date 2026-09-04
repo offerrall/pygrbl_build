@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented in this file.
 
+## 0.4.0 - 2026-09-04
+
+### Added
+
+- `l2l_gcode` now accepts encoded image `bytes`, `bytearray`, and loaded
+  `PIL.Image.Image` instances in addition to file paths. In-memory services can
+  generate and stream raster G-code without creating temporary image files.
+- In-memory inputs receive the same traceability header as paths: encoded bytes
+  are hashed directly, while Pillow images are hashed from their mode, size,
+  and pixel content.
+
+### Changed
+
+- Exported the `ImageSource` type alias describing every accepted raster input.
+
 ## 0.3.0 - 2026-06-19
 
 ### Added
@@ -49,4 +64,3 @@ All notable changes to this project are documented in this file.
   outlines as closed contours, and each cubic Bezier is approximated by
   biarcs and emitted as `G2`/`G3` arcs (with a `G1` fallback). Pure
   Python, Pillow only. Outlines only — interior filling is not ported yet.
-
