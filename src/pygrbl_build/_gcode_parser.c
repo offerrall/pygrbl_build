@@ -23,7 +23,7 @@ static inline double fast_atof(const char* str) {
         str++;
     }
 
-    while (*str && (*str >= '0' && *str <= '9' || *str == '.')) {
+    while (*str && ((*str >= '0' && *str <= '9') || *str == '.')) {
         if (*str == '.' && !in_fraction) {
             in_fraction = 1;
         } else if (*str >= '0' && *str <= '9') {
@@ -74,7 +74,7 @@ static void update_bbox_from_line(const char* line,
             }
 
             // Skip past number
-            while (*p >= '0' && *p <= '9' || *p == '.' || *p == '-' || *p == '+') {
+            while ((*p >= '0' && *p <= '9') || *p == '.' || *p == '-' || *p == '+') {
                 p++;
             }
         } else {
