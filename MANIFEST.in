@@ -1,0 +1,2 @@
+# Compile extensions for each target; never ship binaries from a local checkout.
+global-exclude *.so *.pyd

@@ -166,3 +166,24 @@ Public API: `L2LProfile`, `l2l_gcode`, `SvgProfile`, `svg_gcode`,
 `Img2VectorProfile`, `img2vector_gcode`, `Img2SvgProfile`, `img2svg`,
 `get_bounding_box`, `generate_framing_gcode`, `write_gcode`. See the
 docstrings.
+
+## Publishing to PyPI
+
+`.github/workflows/build.yml` builds and tests on pushes to `main` (excluding
+documentation-only changes), on published GitHub releases, and on manual runs.
+Only **Actions → Build distributions → Run workflow → main** publishes to PyPI,
+after all required jobs succeed. Pushes and releases only create CI artifacts.
+
+Before publishing a new version, update `__version__` in `src/pygrbl_build/__init__.py`.
+The workflow does not increment versions or skip existing PyPI files.
+
+One-time setup: create the `pypi-release` GitHub environment and add a GitHub
+Trusted Publisher in the PyPI project's Publishing settings with:
+
+- Owner: `offerrall`
+- Repository: `pygrbl_build`
+- Workflow filename: `build.yml`
+- Environment: `pypi-release`
+
+Authentication uses OIDC (`id-token: write`); no PyPI API token secret is needed.
+See [PyPI's Trusted Publisher setup](https://docs.pypi.org/trusted-publishers/adding-a-publisher/).

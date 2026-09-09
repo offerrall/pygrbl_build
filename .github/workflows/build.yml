@@ -1,0 +1,81 @@
+name: Build distributions
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build_wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-2022]
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Build and test wheels
+        uses: pypa/cibuildwheel@v4.2.1
+        env:
+          CIBW_BUILD: 'cp310-* cp311-* cp312-* cp313-* cp314-*'
+          CIBW_SKIP: '*-musllinux_*'
+          CIBW_ARCHS_LINUX: x86_64
+          CIBW_ARCHS_WINDOWS: AMD64
+          CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
+          CIBW_TEST_REQUIRES: pytest
+          CIBW_TEST_COMMAND: 'python -m pytest {project}/tests -q'
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: dist-${{ matrix.os }}
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+
+  build_sdist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: '3.13'
+      - run: python -m pip install build twine pytest
+      - run: python -m build --sdist
+      - run: python -m twine check dist/*
+      - name: Build and test from the source distribution
+        run: |
+          python -m pip install dist/*.tar.gz
+          python -m pytest -q
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: dist-source
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  publish_to_pypi:
+    name: Publish to PyPI
+    needs: [build_wheels, build_sdist]
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: pypi-release
+    permissions:
+      id-token: write
+    concurrency:
+      group: pypi-release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          pattern: dist-*
+          path: dist
+          merge-multiple: true
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
