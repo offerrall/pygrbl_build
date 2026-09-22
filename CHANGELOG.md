@@ -2,6 +2,37 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.0.0 - 2026-09-22
+
+### Added
+
+- **Jarvis raster engraving** (`jarvis_gcode` + `JarvisProfile`): converts
+  color or grayscale images to a 1-bit dot pattern using the
+  Jarvis-Judice-Ninke error-diffusion kernel in C, then emits horizontal
+  raster G-code through the existing native engine. Supports image paths,
+  encoded bytes, bytearrays and Pillow images.
+- Jarvis settings for resolution, feed, laser power, grayscale formula and
+  channel weights, brightness, contrast, white clip, bidirectional scanning,
+  overscan and `M3`/`M4` mode.
+- Regression tests for Jarvis diffusion at image edges, binary power,
+  transparency, input formats and profile validation.
+
+### Changed
+
+- Publishing a GitHub release now publishes the built distributions to PyPI
+  after the wheel and source distribution jobs pass. The publish job checks
+  that the release tag matches the package version. Pushes and manual runs
+  continue to produce build artifacts only.
+
+### Fixed
+
+- Profiles and framing G-code reject `NaN` and infinite numeric values
+  before those values can reach generated G-code.
+
+Jarvis currently supports horizontal raster passes. Its diffusion kernel
+follows LaserGRBL's behavior, while image resizing uses Pillow, so complete
+byte-for-byte parity with LaserGRBL is not guaranteed.
+
 ## 0.4.1 - 2026-09-04
 
 ### Changed
