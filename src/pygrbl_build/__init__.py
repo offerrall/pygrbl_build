@@ -1,4 +1,5 @@
 import hashlib
+import math
 import os
 from dataclasses import dataclass
 from io import BytesIO
@@ -11,9 +12,10 @@ from PIL import Image
 from . import _l2l_native
 from . import _svg
 from . import _img2vec
+from . import _jarvis
 from . import _gcode_parser
 
-__version__ = "0.4.1"
+__version__ = "1.0.0"
 
 ImageSource = Union[str, os.PathLike, bytes, bytearray, Image.Image]
 SvgSource = Union[str, os.PathLike, bytes, bytearray]
@@ -24,6 +26,8 @@ __all__ = [
     "ImageSource",
     "SvgSource",
     "l2l_gcode",
+    "JarvisProfile",
+    "jarvis_gcode",
     "SvgProfile",
     "svg_gcode",
     "Img2VectorProfile",
@@ -98,6 +102,8 @@ class L2LProfile:
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, (int, float)):
                 raise TypeError(f"{name} must be a number, got {type(value).__name__}")
+            if not math.isfinite(value):
+                raise ValueError(f"{name} must be finite, got {value}")
         for name in ("feed", "s_min", "s_max", "white_threshold"):
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, int):
@@ -313,6 +319,95 @@ def l2l_gcode(source: ImageSource, profile: L2LProfile) -> Iterator[str]:
     )
 
 
+@dataclass(frozen=True)
+class JarvisProfile:
+    """Settings for 1-bit Jarvis-Judice-Ninke raster engraving.
+
+    Dots are engraved during horizontal raster moves at ``s_max`` power;
+    white pixels use S0. ``lines_per_mm`` controls dot pitch. Grayscale
+    settings match LaserGRBL's image import; ``bidirectional`` and
+    ``overscan_mm`` follow this library's existing raster conventions.
+    """
+
+    width_mm: float
+    lines_per_mm: float = 3.0
+    feed: int = 3000
+    s_max: int = 1000
+    white_clip: int = 5
+    bidirectional: bool = True
+    overscan_mm: float = 0.0
+    laser_on: str = "M4"
+    formula: str = "simple_average"
+    red: int = 100
+    green: int = 100
+    blue: int = 100
+    brightness: int = 100
+    contrast: int = 100
+
+    def __post_init__(self) -> None:
+        for name in ("width_mm", "lines_per_mm", "overscan_mm"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise TypeError(f"{name} must be a number, got {type(value).__name__}")
+            if not math.isfinite(value):
+                raise ValueError(f"{name} must be finite, got {value}")
+        for name in ("feed", "s_max", "white_clip", "red", "green", "blue",
+                     "brightness", "contrast"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise TypeError(f"{name} must be int, got {type(value).__name__}")
+        if not isinstance(self.bidirectional, bool):
+            raise TypeError("bidirectional must be bool")
+        if self.width_mm <= 0 or self.lines_per_mm <= 0 or self.feed <= 0:
+            raise ValueError("width_mm, lines_per_mm and feed must be positive")
+        if self.overscan_mm < 0 or self.s_max <= 0:
+            raise ValueError("overscan_mm must be >= 0 and s_max must be positive")
+        for name in ("white_clip", "red", "green", "blue", "brightness"):
+            value = getattr(self, name)
+            if not 0 <= value <= 100:
+                raise ValueError(f"{name} must be in 0-100, got {value}")
+        if self.contrast < 0:
+            raise ValueError(f"contrast must be >= 0, got {self.contrast}")
+        if self.laser_on not in ("M3", "M4"):
+            raise ValueError("laser_on must be 'M3' or 'M4'")
+        if self.formula not in ("simple_average", "weight_average",
+                                "optical_correct", "custom"):
+            raise ValueError(f"unknown grayscale formula: {self.formula!r}")
+
+
+def jarvis_gcode(source: ImageSource, profile: JarvisProfile) -> Iterator[str]:
+    """Generate Jarvis-dithered horizontal raster G-code from an image.
+
+    Accepts a path, encoded image bytes, bytearray, or Pillow image.
+    Output lines have no trailing newline. Image work happens at call
+    time; the native raster iterator emits the G-code lazily.
+    """
+    image, source_name, source_hash = _open_source(source)
+    dots = _jarvis.prepare(image, profile)
+    w, h = dots.size
+    px = 1.0 / profile.lines_per_mm
+    xs = tuple(f"{i * px:.3f}" for i in range(w + 1))
+    ys = tuple(f"{i * px:.3f}" for i in range(h))
+    ss = tuple(str(i) for i in range(profile.s_max + 1))
+    if profile.overscan_mm:
+        xm = tuple(f"{i * px - profile.overscan_mm:.3f}" for i in range(w + 1))
+        xp = tuple(f"{i * px + profile.overscan_mm:.3f}" for i in range(w + 1))
+    else:
+        xm = xp = None
+    body = _l2l_native.generate(
+        dots.tobytes(), w, h, 2, 0, 0, 0, profile.s_max,
+        xs, ys, ss, int(profile.bidirectional), xm, xp,
+    )
+    header = [
+        f"; pygrbl_build v{__version__}",
+        f"; image: {source_name} sha256:{source_hash}",
+        f"; profile: {profile}",
+        f"; {w}x{h} px @ {profile.lines_per_mm} lines/mm (Jarvis)",
+        "G90", "G21", f"{profile.laser_on} S0", f"G1 F{profile.feed}",
+    ]
+    return chain(header, body, ("M5", "G0 X0 Y0"))
+
+
 _FIRMWARES = ("grbl", "smoothie", "marlin", "vigowork")
 _COLOR_FILTERS = ("all", "red", "green", "blue", "black")
 
@@ -390,6 +485,8 @@ class SvgProfile:
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, (int, float)):
                 raise TypeError(f"{name} must be a number, got {type(value).__name__}")
+            if not math.isfinite(value):
+                raise ValueError(f"{name} must be finite, got {value}")
         for name in ("support_pwm", "to_mm", "smart_bezier", "scale_to_max",
                      "reduce", "no_arcs"):
             if not isinstance(getattr(self, name), bool):
@@ -562,6 +659,8 @@ class Img2VectorProfile:
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, (int, float)):
                 raise TypeError(f"{name} must be a number, got {type(value).__name__}")
+            if not math.isfinite(value):
+                raise ValueError(f"{name} must be finite, got {value}")
         for name in ("feed", "s_max", "turdsize", "red", "green", "blue",
                      "brightness", "contrast", "white_clip", "threshold"):
             value = getattr(self, name)
@@ -718,6 +817,8 @@ class Img2SvgProfile:
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, (int, float)):
                 raise TypeError(f"{name} must be a number, got {type(value).__name__}")
+            if not math.isfinite(value):
+                raise ValueError(f"{name} must be finite, got {value}")
         for name in ("turdsize", "red", "green", "blue", "brightness",
                      "contrast", "white_clip", "threshold"):
             value = getattr(self, name)
@@ -856,6 +957,10 @@ def generate_framing_gcode(
         ValueError: If min >= max on either axis, power is outside 0-100,
             or speed is not positive.
     """
+    for name, value in (("min_x", min_x), ("max_x", max_x),
+                        ("min_y", min_y), ("max_y", max_y), ("power", power)):
+        if not math.isfinite(value):
+            raise ValueError(f"{name} must be finite, got {value}")
     if min_x >= max_x:
         raise ValueError(f"min_x ({min_x}) must be less than max_x ({max_x})")
     if min_y >= max_y:

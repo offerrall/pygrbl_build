@@ -12,6 +12,7 @@ from pygrbl_build import (
     img2vector_gcode,
     l2l_gcode,
     svg_gcode,
+    generate_framing_gcode,
 )
 
 
@@ -113,3 +114,28 @@ def test_other_apis_reject_unsupported_sources():
         img2svg(object(), Img2SvgProfile(width_mm=1))
     with pytest.raises(TypeError, match="SVG source"):
         svg_gcode(object(), SvgProfile())
+
+
+@pytest.mark.parametrize("profile,field", [
+    (L2LProfile, "width_mm"),
+    (L2LProfile, "overscan_mm"),
+    (SvgProfile, "offset_x"),
+    (Img2VectorProfile, "quality"),
+    (Img2VectorProfile, "offset_y"),
+    (Img2SvgProfile, "opttolerance"),
+])
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), -float("inf")])
+def test_profiles_reject_nonfinite_values(profile, field, value):
+    kwargs = {field: value}
+    if profile is not SvgProfile:
+        kwargs.setdefault("width_mm", 1)
+    with pytest.raises(ValueError, match=f"{field} must be finite"):
+        profile(**kwargs)
+
+
+@pytest.mark.parametrize("field", ["min_x", "max_x", "min_y", "max_y", "power"])
+def test_framing_rejects_nonfinite_values(field):
+    kwargs = dict(min_x=0, max_x=1, min_y=0, max_y=1, power=10)
+    kwargs[field] = float("nan")
+    with pytest.raises(ValueError, match=f"{field} must be finite"):
+        generate_framing_gcode(**kwargs)

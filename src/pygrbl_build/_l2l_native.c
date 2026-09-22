@@ -1,5 +1,6 @@
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
+#include <limits.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -396,8 +397,79 @@ fail:
     return NULL;
 }
 
+/* LaserGRBL's Cyotek Jarvis-Judice-Ninke diffusion. The reference
+ * implementation updates an 8-bit image after every weighted addition,
+ * truncating integer division toward zero and clamping each update. Its
+ * offset test is strict (> 0), including the current row: that skips
+ * diffusion on the first row and into column zero. Preserve these quirks
+ * for reproducible dots at image boundaries. */
+static void
+jarvis_add(unsigned char *data, int w, int h, int x, int y,
+           int dx, int dy, int error, int weight)
+{
+    if (dy == 0 && y == 0)
+        return;
+    int nx = x + dx;
+    int ny = y + dy;
+    if (nx <= 0 || nx >= w || ny < 0 || ny >= h)
+        return;
+    size_t pos = (size_t)ny * (size_t)w + (size_t)nx;
+    int value = (int)data[pos] + error * weight / 48;
+    if (value < 0) value = 0;
+    if (value > 255) value = 255;
+    data[pos] = (unsigned char)value;
+}
+
+static PyObject *
+l2l_dither_jarvis(PyObject *self, PyObject *args)
+{
+    Py_buffer source;
+    Py_ssize_t w, h;
+    if (!PyArg_ParseTuple(args, "y*nn:dither_jarvis", &source, &w, &h))
+        return NULL;
+    if (w < 1 || h < 1 || w > INT_MAX || h > INT_MAX ||
+        w > PY_SSIZE_T_MAX / h || source.len != w * h) {
+        PyBuffer_Release(&source);
+        PyErr_SetString(PyExc_ValueError, "gray buffer must have width*height bytes and positive dimensions");
+        return NULL;
+    }
+    PyObject *result = PyBytes_FromStringAndSize(source.buf, source.len);
+    PyBuffer_Release(&source);
+    if (!result)
+        return NULL;
+    unsigned char *data = (unsigned char *)PyBytes_AS_STRING(result);
+    for (Py_ssize_t y = 0; y < h; y++) {
+        for (Py_ssize_t x = 0; x < w; x++) {
+            size_t pos = (size_t)y * (size_t)w + (size_t)x;
+            int old = data[pos];
+            /* TransformPixel performs a second RGB->gray conversion even
+             * though all three channels are equal after preprocessing.
+             * Its byte cast truncates before the 128 threshold. */
+            int luminosity = (int)(0.299 * old + 0.587 * old + 0.114 * old);
+            int next = luminosity < 128 ? 0 : 255;
+            int error = old - next;
+            data[pos] = (unsigned char)next;
+            jarvis_add(data, (int)w, (int)h, (int)x, (int)y, 1, 0, error, 7);
+            jarvis_add(data, (int)w, (int)h, (int)x, (int)y, 2, 0, error, 5);
+            jarvis_add(data, (int)w, (int)h, (int)x, (int)y, -2, 1, error, 3);
+            jarvis_add(data, (int)w, (int)h, (int)x, (int)y, -1, 1, error, 5);
+            jarvis_add(data, (int)w, (int)h, (int)x, (int)y, 0, 1, error, 7);
+            jarvis_add(data, (int)w, (int)h, (int)x, (int)y, 1, 1, error, 5);
+            jarvis_add(data, (int)w, (int)h, (int)x, (int)y, 2, 1, error, 3);
+            jarvis_add(data, (int)w, (int)h, (int)x, (int)y, -2, 2, error, 1);
+            jarvis_add(data, (int)w, (int)h, (int)x, (int)y, -1, 2, error, 3);
+            jarvis_add(data, (int)w, (int)h, (int)x, (int)y, 0, 2, error, 5);
+            jarvis_add(data, (int)w, (int)h, (int)x, (int)y, 1, 2, error, 3);
+            jarvis_add(data, (int)w, (int)h, (int)x, (int)y, 2, 2, error, 1);
+        }
+    }
+    return result;
+}
+
 static PyMethodDef l2l_methods[] = {
     {"generate", l2l_generate, METH_VARARGS, generate_doc},
+    {"dither_jarvis", l2l_dither_jarvis, METH_VARARGS,
+     "Dither an 8-bit grayscale image with LaserGRBL's Jarvis kernel."},
     {NULL, NULL, 0, NULL},
 };
 

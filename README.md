@@ -1,13 +1,16 @@
-# PyGrbl_Build 0.4.1
+# PyGrbl_Build 1.0.0
 
 [![PyPI](https://img.shields.io/pypi/v/pygrbl_build.svg)](https://pypi.org/project/pygrbl_build/)
 
 A collection of algorithms to generate **G-code for GRBL diode lasers**
-from different sources, plus tooling around the G-code itself. Four
+from different sources, plus tooling around the G-code itself. Five
 generators today:
 
 - **Line-to-Line** (`l2l_gcode`) — raster engraving from an image, with
   LaserGRBL fidelity.
+- **Jarvis** (`jarvis_gcode`) — 1-bit Jarvis-Judice-Ninke error diffusion
+  followed by the same raster G-code engine. The dots are short powered
+  raster segments, as in LaserGRBL.
 - **SVG vector** (`svg_gcode`) — vector tracing from an SVG (paths,
   basic shapes, groups, transforms), a faithful port of LaserGRBL's SVG 
   import. Pure Python, no extra dependency.
@@ -62,7 +65,23 @@ profile = L2LProfile(width_mm=300.0, lines_per_mm=10.0, feed=3000, s_max=100)
 write_gcode(l2l_gcode("shield.png", profile), "shield.nc")
 ```
 
-All image APIs (`l2l_gcode`, `img2vector_gcode`, and `img2svg`) also accept
+Jarvis dithering (`jarvis_gcode` + `JarvisProfile`):
+
+```python
+from pygrbl_build import JarvisProfile, jarvis_gcode, write_gcode
+
+profile = JarvisProfile(width_mm=80.0, lines_per_mm=3.0, feed=3000, s_max=1000)
+write_gcode(jarvis_gcode("photo.png", profile), "photo.nc")
+```
+
+Jarvis converts a color or gray image to a black-and-white dot pattern.
+Its profile exposes LaserGRBL's grayscale formula, channel weights,
+brightness, contrast and white clip, plus this library's bidirectional
+scan and optional overscan. It uses horizontal raster passes; vertical
+and diagonal directions are not implemented. The diffusion follows the
+coefficients and edge behavior of LaserGRBL's Jarvis implementation.
+
+All image APIs (`l2l_gcode`, `jarvis_gcode`, `img2vector_gcode`, and `img2svg`) also accept
 encoded image `bytes`, `bytearray`, or an already loaded `PIL.Image.Image`.
 This allows in-memory services to work without writing a temporary image:
 
@@ -162,7 +181,8 @@ generator is a lazy iterator of lines, so anything beyond writing a
 plain file (compression, network shipping, streaming to the machine) is
 the upper layer's job — consume the iterator with whatever sink you need.
 
-Public API: `L2LProfile`, `l2l_gcode`, `SvgProfile`, `svg_gcode`,
+Public API: `L2LProfile`, `l2l_gcode`, `JarvisProfile`, `jarvis_gcode`,
+`SvgProfile`, `svg_gcode`,
 `Img2VectorProfile`, `img2vector_gcode`, `Img2SvgProfile`, `img2svg`,
 `get_bounding_box`, `generate_framing_gcode`, `write_gcode`. See the
 docstrings.
@@ -171,11 +191,13 @@ docstrings.
 
 `.github/workflows/build.yml` builds and tests on pushes to `main` (excluding
 documentation-only changes), on published GitHub releases, and on manual runs.
-Only **Actions → Build distributions → Run workflow → main** publishes to PyPI,
-after all required jobs succeed. Pushes and releases only create CI artifacts.
+Publishing a GitHub release automatically publishes its distributions to PyPI
+after all required jobs succeed. Pushes and manual runs only create CI artifacts.
 
-Before publishing a new version, update `__version__` in `src/pygrbl_build/__init__.py`.
-The workflow does not increment versions or skip existing PyPI files.
+Before creating a release, update `__version__` in `src/pygrbl_build/__init__.py`
+and use the matching version for the release tag (for example, `v1.0.0`).
+The workflow checks this match; it does not increment versions or skip existing
+PyPI files.
 
 One-time setup: create the `pypi-release` GitHub environment and add a GitHub
 Trusted Publisher in the PyPI project's Publishing settings with:

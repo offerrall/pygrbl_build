@@ -63,7 +63,7 @@ jobs:
   publish_to_pypi:
     name: Publish to PyPI
     needs: [build_wheels, build_sdist]
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'release' && github.event.action == 'published'
     runs-on: ubuntu-latest
     environment: pypi-release
     permissions:
@@ -72,6 +72,26 @@ jobs:
       group: pypi-release
       cancel-in-progress: false
     steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Check release version
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          python - <<'PY'
+          import ast
+          import os
+          from pathlib import Path
+
+          tree = ast.parse(Path('src/pygrbl_build/__init__.py').read_text())
+          version = next(
+              node.value.value for node in tree.body
+              if isinstance(node, ast.Assign)
+              and any(isinstance(target, ast.Name) and target.id == '__version__' for target in node.targets)
+          )
+          tag = os.environ['RELEASE_TAG'].removeprefix('v')
+          if tag != version:
+              raise SystemExit(f'Release tag {tag!r} does not match package version {version!r}')
+          PY
       - uses: actions/download-artifact@v8.0.1
         with:
           pattern: dist-*
