@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.0.1 - 2026-09-29
+
+### Changed
+
+- Documentation only: the README keeps an overview and a short example, the
+  guides move to `docs/` (raster, vector, bounds and framing, output), and
+  the release notes for maintainers move to `RELEASING.md`. The README title
+  no longer carries the version. The code is the same as 1.0.0.
+
 ## 1.0.0 - 2026-09-22
 
 ### Added
