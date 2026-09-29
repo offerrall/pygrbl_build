@@ -15,7 +15,7 @@ from . import _img2vec
 from . import _jarvis
 from . import _gcode_parser
 
-__version__ = "1.0.2"
+__version__ = "1.0.3"
 
 ImageSource = Union[str, os.PathLike, bytes, bytearray, Image.Image]
 SvgSource = Union[str, os.PathLike, bytes, bytearray]

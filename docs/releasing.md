@@ -1,14 +1,14 @@
 # Releasing
 
-[Back to README](README.md)
-
 `.github/workflows/build.yml` builds and tests on pushes to `main` (excluding
 documentation-only changes), on published GitHub releases, and on manual runs.
-Publishing a GitHub release automatically publishes its distributions to PyPI
-after all required jobs succeed. Pushes and manual runs only create CI artifacts.
+Wheels are built and tested with cibuildwheel for Linux x86_64 and Windows
+x86-64. Publishing a GitHub release automatically publishes its distributions
+to PyPI after all required jobs succeed. Pushes and manual runs only create CI
+artifacts.
 
 Before creating a release, update `__version__` in `src/pygrbl_build/__init__.py`
-and use the matching version for the release tag (for example, `v1.0.0`).
+and `CHANGELOG.md`, and use the matching version for the release tag (`vX.Y.Z`).
 The workflow checks this match; it does not increment versions or skip existing
 PyPI files.
 

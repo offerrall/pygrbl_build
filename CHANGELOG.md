@@ -2,14 +2,34 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.0.3 - 2026-09-29
+
+### Changed
+
+- Documentation only: the README becomes a short entrance to the documentation
+  site at https://offerrall.github.io/pygrbl-build/, and `docs/overview.md`
+  holds the introduction: the algorithms, speed, lazy output and pairing with
+  pygrbl-streamer. `docs/output.md` merges into the overview, without the
+  hand-kept list of public names.
+- New `docs/limitations.md` gathers what each algorithm does not do and the
+  platforms with prebuilt wheels. The previous README said a C compiler was
+  always required; it is needed only where no wheel exists.
+- `RELEASING.md` moves to `docs/releasing.md`.
+- Every example imports what it needs; the Bounds and framing example was
+  missing `svg_gcode` and `SvgProfile`. The dead `pygrbl-server` link is gone.
+- `pyproject.toml`: `[project.urls]` with the documentation site, repository,
+  issues and changelog; a Python 3.14 classifier, matching the wheels; a
+  shorter description.
+- The code is the same as 1.0.2.
+
 ## 1.0.2 - 2026-09-29
 
 ### Changed
 
 - Metadata only: the distribution name is spelled `pygrbl-build`, PyPI's
   canonical form, in `pyproject.toml` and the docs. `pip install pygrbl-build`
-  and `import pygrbl_build` are unchanged. The code is the same as 1.0.1 (the
-  G-code header still reads `; pygrbl_build v1.0.2`).
+  and `import pygrbl_build` are unchanged. The code is the same as 1.0.1,
+  apart from the version in the G-code header (`; pygrbl_build v1.0.2`).
 
 ## 1.0.1 - 2026-09-29
 
@@ -51,7 +71,7 @@ Jarvis currently supports horizontal raster passes. Its diffusion kernel
 follows LaserGRBL's behavior, while image resizing uses Pillow, so complete
 byte-for-byte parity with LaserGRBL is not guaranteed.
 
-## 0.4.1 - 2026-09-04
+## 0.4.1 - 2026-09-09
 
 ### Changed
 
