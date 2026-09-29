@@ -19,12 +19,12 @@ The full documentation is at https://offerrall.github.io/pygrbl-build/.
 
 ## Documentation
 
-- [Overview](docs/overview.md): the algorithms, speed, lazy output and how it pairs with pygrbl-streamer.
-- [Raster](docs/raster.md): Line-to-Line and Jarvis engraving, and the image inputs they accept.
-- [Vector](docs/vector.md): SVG to G-code, image to G-code outlines, and image to SVG.
-- [Bounds and framing](docs/framing.md): the bounding box of any G-code, and a framing pass around it.
-- [Limitations](docs/limitations.md): what each algorithm does not do, and the platforms with prebuilt wheels.
+- [Overview](https://offerrall.github.io/pygrbl-build/): the algorithms, speed, lazy output and how it pairs with pygrbl-streamer.
+- [Raster](https://offerrall.github.io/pygrbl-build/raster/): Line-to-Line and Jarvis engraving, and the image inputs they accept.
+- [Vector](https://offerrall.github.io/pygrbl-build/vector/): SVG to G-code, image to G-code outlines, and image to SVG.
+- [Bounds and framing](https://offerrall.github.io/pygrbl-build/framing/): the bounding box of any G-code, and a framing pass around it.
+- [Limitations](https://offerrall.github.io/pygrbl-build/limitations/): what each algorithm does not do, and the platforms with prebuilt wheels.
 
 ### Maintaining
 
-- [Releasing](docs/releasing.md): CI, PyPI trusted publishing and the release steps.
+- [Releasing](https://offerrall.github.io/pygrbl-build/releasing/): CI, PyPI trusted publishing and the release steps.
