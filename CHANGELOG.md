@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.0.2 - 2026-09-29
+
+### Changed
+
+- Metadata only: the distribution name is spelled `pygrbl-build`, PyPI's
+  canonical form, in `pyproject.toml` and the docs. `pip install pygrbl-build`
+  and `import pygrbl_build` are unchanged. The code is the same as 1.0.1 (the
+  G-code header still reads `; pygrbl_build v1.0.2`).
+
 ## 1.0.1 - 2026-09-29
 
 ### Changed

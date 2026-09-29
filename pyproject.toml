@@ -3,12 +3,12 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "pygrbl_build"
+name = "pygrbl-build"
 description = "G-code generation for GRBL diode lasers (Line-to-Line and Jarvis raster, SVG and image vector), plus image-to-SVG tracing"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
-authors = [{ name = "pygrbl_build developers" }]
+authors = [{ name = "pygrbl-build developers" }]
 keywords = ["grbl", "gcode", "laser", "raster", "jarvis", "dithering", "vector", "svg", "potrace", "lasergrbl", "engraving"]
 classifiers = [
     "Development Status :: 4 - Beta",
