@@ -6,3 +6,4 @@ dist/
 *.nc
 *.nc.gz
 *.gcode
+.vscode/
